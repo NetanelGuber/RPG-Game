@@ -4,1017 +4,374 @@ from time import sleep
 import tkinter as tk
 from threading import Thread
 from PIL import Image, ImageTk
-from tkinter import Tk, OptionMenu, StringVar
+from tkinter import StringVar, OptionMenu, Button
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
+# --- Constants and Configuration ---
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGE_PATH = os.path.join(CURRENT_DIR, "RPG Images")
 
-clear = lambda: os.system('cls')
-
-running = False
-option_chosen = False
-
-option_var = None
-option_menu = None
-submit_button = None
-
-button_pressed = False
-
-upgrade_button_pressed1 = False
-upgrade_button_pressed2 = False
-upgrade_button_pressed3 = False
-upgrade_button_pressed4 = False
-upgrade_button_pressed5 = False
-
-root = tk.Tk()
-
-# enemy stats
-tier1_enemies = {
-    "Grove Prowler": {"health": 15, "attack": 5},
-    "Cave Stalker": {"health": 25, "attack": 10},
-    "Mountain Scout": {"health": 40, "attack": 15},
+# Using a dictionary for easier lookup by tier
+ALL_ENEMIES = {
+    1: {
+        "level_cap": 5, "enemies": {
+            "Grove Prowler": {"health": 15, "attack": 5},
+            "Cave Stalker": {"health": 25, "attack": 10},
+            "Mountain Scout": {"health": 40, "attack": 15},
+        }
+    },
+    2: {
+        "level_cap": 10, "enemies": {
+            "Marsh Harrier": {"health": 40, "attack": 15},
+            "Desert Nomad": {"health": 60, "attack": 20},
+            "Tundra Vanguard": {"health": 80, "attack": 25},
+        }
+    },
+    3: {
+        "level_cap": 15, "enemies": {
+            "Flame Specter": {"health": 120, "attack": 30},
+            "Thunder Wraith": {"health": 150, "attack": 35},
+            "Frost Phantom": {"health": 180, "attack": 40},
+        }
+    },
+    4: {
+        "level_cap": 20, "enemies": {
+            "Abyssal Knight": {"health": 220, "attack": 45},
+            "Celestial Guard": {"health": 260, "attack": 50},
+            "Ethereal Templar": {"health": 300, "attack": 55},
+        }
+    },
+    5: {
+        "level_cap": 25, "enemies": {
+            "Primeval Behemoth": {"health": 350, "attack": 60},
+            "Arcane Colossus": {"health": 400, "attack": 65},
+            "Cosmic Leviathan": {"health": 450, "attack": 70},
+        }
+    }
 }
 
-tier2_enemies = {
-    "Marsh Harrier": {"health": 40, "attack": 15},
-    "Desert Nomad": {"health": 60, "attack": 20},
-    "Tundra Vanguard": {"health": 80, "attack": 25},
+UPGRADE_TIERS = {
+    1: {
+        "level_cap": 5,
+        "upgrades": {
+            "1": {"text": "Increase attack damage by 5", "action": lambda p: setattr(p, 'attack', p.attack + 5)},
+            "2": {"text": "Increase healing amount by 10", "action": lambda g: setattr(g, 'heal_amount', g.heal_amount + 10)}
+        }
+    },
+    2: {
+        "level_cap": 10,
+        "upgrades": {
+            "1": {"text": "Increase attack damage by 7.5", "action": lambda p: setattr(p, 'attack', p.attack + 7.5)},
+            "2": {"text": "Increase healing amount by 20", "action": lambda g: setattr(g, 'heal_amount', g.heal_amount + 20)},
+            "3": {"text": "Increase critical chance by 1%", "action": lambda p: setattr(p, 'critical_chance', p.critical_chance + 1)}
+        }
+    },
+    3: {
+        "level_cap": 15,
+        "upgrades": {
+            "1": {"text": "Increase attack damage by 10", "action": lambda p: setattr(p, 'attack', p.attack + 10)},
+            "2": {"text": "Increase healing amount by 25", "action": lambda g: setattr(g, 'heal_amount', g.heal_amount + 25)},
+            "3": {"text": "Increase critical chance by 2%", "action": lambda p: setattr(p, 'critical_chance', p.critical_chance + 2)}
+        }
+    },
+    4: {
+        "level_cap": 20,
+        "upgrades": {
+            "1": {"text": "Increase attack damage by 12.5", "action": lambda p: setattr(p, 'attack', p.attack + 12.5)},
+            "2": {"text": "Increase healing amount by 30", "action": lambda g: setattr(g, 'heal_amount', g.heal_amount + 30)},
+            "3": {"text": "Increase critical chance by 2%", "action": lambda p: setattr(p, 'critical_chance', p.critical_chance + 2)}
+        }
+    },
+    5: {
+        "level_cap": 25,
+        "upgrades": {
+            "1": {"text": "Increase attack damage by 15", "action": lambda p: setattr(p, 'attack', p.attack + 15)},
+            "2": {"text": "Increase healing amount by 35", "action": lambda g: setattr(g, 'heal_amount', g.heal_amount + 35)},
+            "3": {"text": "Increase critical chance by 3%", "action": lambda p: setattr(p, 'critical_chance', p.critical_chance + 3)}
+        }
+    }
 }
 
-tier3_enemies = {
-    "Flame Specter": {"health": 120, "attack": 30},
-    "Thunder Wraith": {"health": 150, "attack": 35},
-    "Frost Phantom": {"health": 180, "attack": 40},
-}
 
-tier4_enemies = {
-    "Abyssal Knight": {"health": 220, "attack": 45},
-    "Celestial Guard": {"health": 260, "attack": 50},
-    "Ethereal Templar": {"health": 300, "attack": 55},
-}
+# --- Helper Functions ---
+def clear_console():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-tier5_enemies = {
-    "Primeval Behemoth": {"health": 350, "attack": 60},
-    "Arcane Colossus": {"health": 400, "attack": 65},
-    "Cosmic Leviathan": {"health": 450, "attack": 70},
-}
-
-# player stats
-player = {
-    "health": 100, 
-    "attack": 10, 
-    "level": 1,
-    "critical_chance": 1
-}
-
-enemies_defeated = 0
-heal_amount = 10
-
-root.geometry("500x500")
-
-root.title("RPG Game")
-
-canvas = tk.Canvas(root, width=500, height=500)
-canvas.pack(fill="both", expand=True)
-
-left = "w"
-up = "n"
-
-playerHealth_label = canvas.create_text(55, 210, text=f"Your Health: {player['health']}", fill="black", font=("Arial", 12), anchor=left)
-info_label = canvas.create_text(20, 55, text=f"", fill="black", font=("Arial", 12), anchor=left)
-
-image_path1 = os.path.join(current_dir, "RPG Images", "man.png")
-imageOpen1 = Image.open(image_path1)
-new_width1 = imageOpen1.size[0] // 14
-new_height1 = imageOpen1.size[1] // 14
-resized_image1 = imageOpen1.resize((new_width1, new_height1))
-photo1 = ImageTk.PhotoImage(resized_image1)
-image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-
-image_path3 = os.path.join(current_dir, "RPG Images", "sword.png")
-imageOpen3 = Image.open(image_path3)
-new_width3 = imageOpen3.size[0] // 8
-new_height3 = imageOpen3.size[1] // 8
-resized_image3 = imageOpen3.resize((new_width3, new_height3))
-photo3 = ImageTk.PhotoImage(resized_image3)
-image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-
-def fight_enemy(enemy):
-    global enemies_defeated, playerHealth_label, info_label, image1, image3
-
-    left = "w"
-    right = "e"
-    up = "n"
-    down = "s"
-    bottom_left = "sw"
-    bottom_right = "se"
-    top_left = "nw"
-    top_right = "ne"
-
-    if player["level"] <= 5:
-        enemy_name = enemy
-        enemy_health = tier1_enemies[enemy]["health"]
-        enemy_attack = tier1_enemies[enemy]["attack"]
-
-        print(f"A wild {enemy_name} appears!\n")
-
-        image_path2 = os.path.join(current_dir, "RPG Images", "slime.png")
-        imageOpen2 = Image.open(image_path2)
-        new_width2 = imageOpen2.size[0] // 24
-        new_height2 = imageOpen2.size[1] // 24
-        resized_image2 = imageOpen2.resize((new_width2, new_height2))
-        photo2 = ImageTk.PhotoImage(resized_image2)
-        image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-
-        # Display enemy health above the image
-        enemyHealth_label = canvas.create_text(450, 230, text=f"Enemy Health: {enemy_health}", fill="black", font=("Arial", 12), anchor=right)
-        
-        sleep(1)
-
-        while enemy_health > 0 and player["health"] > 0:
-            # Player attacks enemy
-            random_number = random.random()
-
-            if random_number <= player["critical_chance"] / 100:
-                enemy_health -= player["attack"] * 2
-                print(f"You attack the {enemy_name} for {player['attack'] * 2} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(415, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(465, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            else:
-                enemy_health -= player["attack"]
-                print(f"You attack the {enemy_name} for {player['attack']} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-                canvas.itemconfig(info_label, text=f"You attack the {enemy_name} for {player['attack']} damage.") 
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(300, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(350, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            sleep(1)
-
-            if enemy_health <= 0:
-                print(f"The {enemy_name} is defeated!\n")
-                canvas.itemconfig(info_label, text=f"The {enemy_name} is defeated!") 
-                canvas.delete(enemyHealth_label) # delete the enemy health label
-                canvas.delete(image2) # delete the image
-                sleep(2)
-                enemies_defeated += 1
-                player["level"] += 1
-                print(f"You leveled up to level {player['level']}")
-                canvas.itemconfig(info_label, text=f"You leveled up to level {player['level']}") 
-                sleep(2)
-                break
-            
-            # Enemy attacks player
-            player["health"] -= enemy_attack
-            print(f"The {enemy_name} attacks you for {enemy_attack} damage.")
-            canvas.itemconfig(playerHealth_label, text=f"Your Health: {player['health']}") # update text
-            canvas.itemconfig(info_label, text=f"The {enemy_name} attacks you for {enemy_attack} damage.") 
-
-            canvas.delete(image2)
-            image2 = canvas.create_image(150, 300, anchor=right, image=photo2)
-            sleep(0.5)
-            canvas.delete(image2)
-            image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-            sleep(1)
-
-            if player["health"] <= 0:
-                sleep(2)
-                clear()
-                print("You have been defeated. Game Over.")
-                sleep(1)
-                print(f"\nYou killed a total of {enemies_defeated} enemies")
-                print(f"You died with {player['level']} levels")
-                canvas.itemconfig(info_label, text=f"You have been defeated. Game Over.\n\nYou killed a total of {enemies_defeated} enemies\nYou died with {player['level']} levels") 
-                sleep(5)
-                exit()
-
-        if player["health"] > 0:
-            print("You survived the encounter.")
-            canvas.itemconfig(info_label, text=f"You survived the encounter.") 
-            sleep(2)
-            clear()
-    elif player["level"] <= 10:
-        enemy_name = enemy
-        enemy_health = tier2_enemies[enemy]["health"]
-        enemy_attack = tier2_enemies[enemy]["attack"]
-
-        print(f"A wild {enemy_name} appears!\n")
-
-        image_path2 =os.path.join(current_dir, "RPG Images", "slime.png")
-        imageOpen2 = Image.open(image_path2)
-        new_width2 = imageOpen2.size[0] // 24
-        new_height2 = imageOpen2.size[1] // 24
-        resized_image2 = imageOpen2.resize((new_width2, new_height2))
-        photo2 = ImageTk.PhotoImage(resized_image2)
-        image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-
-        # Display enemy health above the image
-        enemyHealth_label = canvas.create_text(450, 230, text=f"Enemy Health: {enemy_health}", fill="black", font=("Arial", 12), anchor=right)
-        
-        sleep(1)
-
-        while enemy_health > 0 and player["health"] > 0:
-            # Player attacks enemy
-            random_number = random.random()
-
-            if random_number <= player["critical_chance"] / 100:
-                enemy_health -= player["attack"] * 2
-                print(f"You attack the {enemy_name} for {player['attack'] * 2} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(415, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(465, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            else:
-                enemy_health -= player["attack"]
-                print(f"You attack the {enemy_name} for {player['attack']} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-                canvas.itemconfig(info_label, text=f"You attack the {enemy_name} for {player['attack']} damage.") 
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(300, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(350, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            sleep(1)
-
-            if enemy_health <= 0:
-                print(f"The {enemy_name} is defeated!\n")
-                canvas.itemconfig(info_label, text=f"The {enemy_name} is defeated!") 
-                canvas.delete(enemyHealth_label) # delete the enemy health label
-                canvas.delete(image2) # delete the image
-                sleep(2)
-                enemies_defeated += 1
-                player["level"] += 1
-                print(f"You leveled up to level {player['level']}")
-                canvas.itemconfig(info_label, text=f"You leveled up to level {player['level']}") 
-                sleep(2)
-                break
-            
-            # Enemy attacks player
-            player["health"] -= enemy_attack
-            print(f"The {enemy_name} attacks you for {enemy_attack} damage.")
-            canvas.itemconfig(playerHealth_label, text=f"Your Health: {player['health']}") # update text
-            canvas.itemconfig(info_label, text=f"The {enemy_name} attacks you for {enemy_attack} damage.") 
-
-            canvas.delete(image2)
-            image2 = canvas.create_image(150, 300, anchor=right, image=photo2)
-            sleep(0.5)
-            canvas.delete(image2)
-            image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-            sleep(1)
-
-            if player["health"] <= 0:
-                sleep(2)
-                clear()
-                print("You have been defeated. Game Over.")
-                sleep(1)
-                print(f"\nYou killed a total of {enemies_defeated} enemies")
-                print(f"You died with {player['level']} levels")
-                canvas.itemconfig(info_label, text=f"You have been defeated. Game Over.\n\nYou killed a total of {enemies_defeated} enemies\nYou died with {player['level']} levels") 
-                sleep(5)
-                exit()
-
-        if player["health"] > 0:
-            print("You survived the encounter.")
-            canvas.itemconfig(info_label, text=f"You survived the encounter.") 
-            sleep(2)
-            clear()
-    elif player["level"] <= 15:
-        enemy_name = enemy
-        enemy_health = tier3_enemies[enemy]["health"]
-        enemy_attack = tier3_enemies[enemy]["attack"]
-
-        print(f"A wild {enemy_name} appears!\n")
-
-        image_path2 =os.path.join(current_dir, "RPG Images", "slime.png")
-        imageOpen2 = Image.open(image_path2)
-        new_width2 = imageOpen2.size[0] // 24
-        new_height2 = imageOpen2.size[1] // 24
-        resized_image2 = imageOpen2.resize((new_width2, new_height2))
-        photo2 = ImageTk.PhotoImage(resized_image2)
-        image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-
-        # Display enemy health above the image
-        enemyHealth_label = canvas.create_text(450, 230, text=f"Enemy Health: {enemy_health}", fill="black", font=("Arial", 12), anchor=right)
-        
-        sleep(1)
-
-        while enemy_health > 0 and player["health"] > 0:
-            # Player attacks enemy
-            random_number = random.random()
-
-            if random_number <= player["critical_chance"] / 100:
-                enemy_health -= player["attack"] * 2
-                print(f"You attack the {enemy_name} for {player['attack'] * 2} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(415, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(465, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            else:
-                enemy_health -= player["attack"]
-                print(f"You attack the {enemy_name} for {player['attack']} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-                canvas.itemconfig(info_label, text=f"You attack the {enemy_name} for {player['attack']} damage.") 
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(300, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(350, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            sleep(1)
-
-            if enemy_health <= 0:
-                print(f"The {enemy_name} is defeated!\n")
-                canvas.itemconfig(info_label, text=f"The {enemy_name} is defeated!") 
-                canvas.delete(enemyHealth_label) # delete the enemy health label
-                canvas.delete(image2) # delete the image
-                sleep(2)
-                enemies_defeated += 1
-                player["level"] += 1
-                print(f"You leveled up to level {player['level']}")
-                canvas.itemconfig(info_label, text=f"You leveled up to level {player['level']}") 
-                sleep(2)
-                break
-            
-            # Enemy attacks player
-            player["health"] -= enemy_attack
-            print(f"The {enemy_name} attacks you for {enemy_attack} damage.")
-            canvas.itemconfig(playerHealth_label, text=f"Your Health: {player['health']}") # update text
-            canvas.itemconfig(info_label, text=f"The {enemy_name} attacks you for {enemy_attack} damage.") 
-
-            canvas.delete(image2)
-            image2 = canvas.create_image(150, 300, anchor=right, image=photo2)
-            sleep(0.5)
-            canvas.delete(image2)
-            image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-            sleep(1)
-
-            if player["health"] <= 0:
-                sleep(2)
-                clear()
-                print("You have been defeated. Game Over.")
-                sleep(1)
-                print(f"\nYou killed a total of {enemies_defeated} enemies")
-                print(f"You died with {player['level']} levels")
-                canvas.itemconfig(info_label, text=f"You have been defeated. Game Over.\n\nYou killed a total of {enemies_defeated} enemies\nYou died with {player['level']} levels") 
-                sleep(5)
-                exit()
-
-        if player["health"] > 0:
-            print("You survived the encounter.")
-            canvas.itemconfig(info_label, text=f"You survived the encounter.") 
-            sleep(2)
-            clear()
-    elif player["level"] <= 20:
-        enemy_name = enemy
-        enemy_health = tier4_enemies[enemy]["health"]
-        enemy_attack = tier4_enemies[enemy]["attack"]
-
-        print(f"A wild {enemy_name} appears!\n")
-
-        image_path2 =os.path.join(current_dir, "RPG Images", "slime.png")
-        imageOpen2 = Image.open(image_path2)
-        new_width2 = imageOpen2.size[0] // 24
-        new_height2 = imageOpen2.size[1] // 24
-        resized_image2 = imageOpen2.resize((new_width2, new_height2))
-        photo2 = ImageTk.PhotoImage(resized_image2)
-        image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-
-        # Display enemy health above the image
-        enemyHealth_label = canvas.create_text(450, 230, text=f"Enemy Health: {enemy_health}", fill="black", font=("Arial", 12), anchor=right)
-        
-        sleep(1)
-
-        while enemy_health > 0 and player["health"] > 0:
-            # Player attacks enemy
-            random_number = random.random()
-
-            if random_number <= player["critical_chance"] / 100:
-                enemy_health -= player["attack"] * 2
-                print(f"You attack the {enemy_name} for {player['attack'] * 2} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(415, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(465, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            else:
-                enemy_health -= player["attack"]
-                print(f"You attack the {enemy_name} for {player['attack']} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-                canvas.itemconfig(info_label, text=f"You attack the {enemy_name} for {player['attack']} damage.") 
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(300, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(350, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            sleep(1)
-
-            if enemy_health <= 0:
-                print(f"The {enemy_name} is defeated!\n")
-                canvas.itemconfig(info_label, text=f"The {enemy_name} is defeated!") 
-                canvas.delete(enemyHealth_label) # delete the enemy health label
-                canvas.delete(image2) # delete the image
-                sleep(2)
-                enemies_defeated += 1
-                player["level"] += 1
-                print(f"You leveled up to level {player['level']}")
-                canvas.itemconfig(info_label, text=f"You have been defeated. Game Over.\n\nYou killed a total of {enemies_defeated} enemies\nYou died with {player['level']} levels") 
-                sleep(2)
-                break
-            
-            # Enemy attacks player
-            player["health"] -= enemy_attack
-            print(f"The {enemy_name} attacks you for {enemy_attack} damage.")
-            canvas.itemconfig(playerHealth_label, text=f"Your Health: {player['health']}") # update text
-            canvas.itemconfig(info_label, text=f"The {enemy_name} attacks you for {enemy_attack} damage.") 
-
-            canvas.delete(image2)
-            image2 = canvas.create_image(150, 300, anchor=right, image=photo2)
-            sleep(0.5)
-            canvas.delete(image2)
-            image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-            sleep(1)
-
-            if player["health"] <= 0:
-                sleep(2)
-                clear()
-                print("You have been defeated. Game Over.")
-                sleep(1)
-                print(f"\nYou killed a total of {enemies_defeated} enemies")
-                print(f"You died with {player['level']} levels")
-                canvas.itemconfig(info_label, text=f"You killed a total of {enemies_defeated} enemies\nYou died with {player['level']} levels") 
-                sleep(5)
-                exit()
-
-        if player["health"] > 0:
-            print("You survived the encounter.")
-            canvas.itemconfig(info_label, text=f"You survived the encounter.") 
-            sleep(2)
-            clear()
-    elif player["level"] <= 25:
-        enemy_name = enemy
-        enemy_health = tier5_enemies[enemy]["health"]
-        enemy_attack = tier5_enemies[enemy]["attack"]
-
-        print(f"A wild {enemy_name} appears!\n")
-
-        image_path2 =os.path.join(current_dir, "RPG Images", "slime.png")
-        imageOpen2 = Image.open(image_path2)
-        new_width2 = imageOpen2.size[0] // 24
-        new_height2 = imageOpen2.size[1] // 24
-        resized_image2 = imageOpen2.resize((new_width2, new_height2))
-        photo2 = ImageTk.PhotoImage(resized_image2)
-        image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-
-        # Display enemy health above the image
-        enemyHealth_label = canvas.create_text(450, 230, text=f"Enemy Health: {enemy_health}", fill="black", font=("Arial", 12), anchor=right)
-        
-        sleep(1)
-
-        while enemy_health > 0 and player["health"] > 0:
-            # Player attacks enemy
-            random_number = random.random()
-
-            if random_number <= player["critical_chance"] / 100:
-                enemy_health -= player["attack"] * 2
-                print(f"You attack the {enemy_name} for {player['attack'] * 2} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(415, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(465, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            else:
-                enemy_health -= player["attack"]
-                print(f"You attack the {enemy_name} for {player['attack']} damage.")
-                canvas.itemconfig(enemyHealth_label, text=f"Enemy Health: {enemy_health}") # update text
-                canvas.itemconfig(info_label, text=f"You attack the {enemy_name} for {player['attack']} damage.") 
-
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(300, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(350, 300, anchor=left, image=photo3)
-                sleep(0.5)
-                canvas.delete(image1)
-                canvas.delete(image3)
-                image1 = canvas.create_image(75, 300, anchor=left, image=photo1)
-                image3 = canvas.create_image(125, 300, anchor=left, image=photo3)
-            sleep(1)
-
-            if enemy_health <= 0:
-                print(f"The {enemy_name} is defeated!\n")
-                canvas.itemconfig(info_label, text=f"The {enemy_name} is defeated!") 
-                canvas.delete(enemyHealth_label) # delete the enemy health label
-                canvas.delete(image2) # delete the image
-                sleep(2)
-                enemies_defeated += 1
-                player["level"] += 1
-                print(f"You leveled up to level {player['level']}")
-                canvas.itemconfig(info_label, text=f"You leveled up to level {player['level']}") 
-                sleep(2)
-                break
-            
-            # Enemy attacks player
-            player["health"] -= enemy_attack
-            print(f"The {enemy_name} attacks you for {enemy_attack} damage.")
-            canvas.itemconfig(playerHealth_label, text=f"Your Health: {player['health']}") # update text
-            canvas.itemconfig(info_label, text=f"The {enemy_name} attacks you for {enemy_attack} damage.") 
-
-            canvas.delete(image2)
-            image2 = canvas.create_image(150, 300, anchor=right, image=photo2)
-            sleep(0.5)
-            canvas.delete(image2)
-            image2 = canvas.create_image(425, 300, anchor=right, image=photo2)
-            sleep(1)
-
-            if player["health"] <= 0:
-                sleep(2)
-                clear()
-                print("You have been defeated. Game Over.")
-                sleep(1)
-                print(f"\nYou killed a total of {enemies_defeated} enemies")
-                print(f"You died with {player['level']} levels")
-                canvas.itemconfig(info_label, text=f"You have been defeated. Game Over.\n\nYou killed a total of {enemies_defeated} enemies\nYou died with {player['level']} levels") 
-                sleep(5)
-                exit()
-
-        if player["health"] > 0:
-            print("You survived the encounter.")
-            canvas.itemconfig(info_label, text=f"You survived the encounter.") 
-            sleep(2)
-            clear()
-
-def select_enemy():
-    if player["level"] <= 5:
-        return random.choice(list(tier1_enemies.keys()))
-    elif player["level"] <= 10:
-        return random.choice(list(tier2_enemies.keys()))
-    elif player["level"] <= 15:
-        return random.choice(list(tier3_enemies.keys()))
-    elif player["level"] <= 20:
-        return random.choice(list(tier4_enemies.keys()))
-    elif player["level"] <= 25:
-        return random.choice(list(tier5_enemies.keys()))
-
-def handle_option():
-    global heal_amount, option_var, button_pressed, option_menu, submit_button
-
-    button_pressed = True
-
-    option = option_var.get()
-
-    option_menu.destroy()
-    submit_button.destroy()
-
+def load_and_resize_image(path, size_divisor):
     try:
-        if option == "1":
-            game_loop()
-        elif option == "2":
-            handle_upgrade()
-        elif option == "3":
-            handle_heal()
-        else:
-            handle_exit()
-    except Exception as e:
-        print(e)
+        image = Image.open(path)
+        new_width = image.size[0] // size_divisor
+        new_height = image.size[1] // size_divisor
+        return ImageTk.PhotoImage(image.resize((new_width, new_height)))
+    except FileNotFoundError:
+        print(f"Error: Image not found at {path}")
+        return None
 
-def handle_upgrade():
-    global heal_amount, upgrade_button_pressed1, root, option_menu, submit_button
+# --- Game Classes ---
+class Player:
+    def __init__(self):
+        self.health = 100
+        self.attack = 10
+        self.level = 1
+        self.critical_chance = 1
 
-    clear()
-    sleep(1)
-    if player["level"] <= 5:
-        def upgrade1():
-            global heal_amount, upgrade_button_pressed1, root, option_menu, submit_button
+class Game:
+    def __init__(self, root_window):
+        self.root = root_window
+        self.player = Player()
+        self.enemies_defeated = 0
+        self.heal_amount = 10
+        self.running = False
+        self.ui_widgets = {}
 
-            option_menu.destroy()
-            submit_button.destroy()
+        self.setup_ui()
 
-            upgrade_option1 = option_var.get()
-            if upgrade_option1 == "1":
-                sleep(1)
-                clear()
-                print("Adding 5 attack damage to you...")
-                player["attack"] += 5
-                sleep(3)
-                clear()
-            elif upgrade_option1 == "2":
-                sleep(1)
-                clear()
-                print("Increasing heal amount by 10...")
-                heal_amount += 10
-                sleep(3)
-                clear()
-            else:
-                sleep(1)
-                clear()
-                print("No upgrade was added")
-                canvas.itemconfig(info_label, text=f"No upgrade was added")
-                sleep(2)
-                clear()
+    def setup_ui(self):
+        self.canvas = tk.Canvas(self.root, width=500, height=500)
+        self.canvas.pack(fill="both", expand=True)
 
-            upgrade_button_pressed1 = True
+        self.ui_widgets['player_health_label'] = self.canvas.create_text(
+            55, 210, text=f"Your Health: {self.player.health}", fill="black", font=("Arial", 12), anchor="w"
+        )
+        self.ui_widgets['info_label'] = self.canvas.create_text(
+            20, 55, text="", fill="black", font=("Arial", 12), anchor="w"
+        )
 
-        print("Tier 1 upgrades\n")
-        print("1. Increase attack damage by 5\n2. Increase healing amount by 10")
-        canvas.itemconfig(info_label, text=f"Tier 1 upgrades\n\n1. Increase attack damage by 5\n2. Increase healing amount by 10")
-        sleep(1)
-        options = ["Choose an option", "1", "2"]
+        self.photo1 = load_and_resize_image(os.path.join(IMAGE_PATH, "man.png"), 14)
+        self.photo3 = load_and_resize_image(os.path.join(IMAGE_PATH, "sword.png"), 8)
+        self.ui_widgets['player_image'] = self.canvas.create_image(75, 300, anchor="w", image=self.photo1)
+        self.ui_widgets['sword_image'] = self.canvas.create_image(125, 300, anchor="w", image=self.photo3)
 
-        option_var = StringVar()
-        option_var.set(options[0])
+        start_button = Button(self.root, text="Begin Game", command=self.start_game_thread, height=2, width=10, font=('Arial', '20'))
+        self.canvas.create_window(250, 450, window=start_button)
+        self.ui_widgets['start_button'] = start_button
 
-        option_menu = OptionMenu(root, option_var, *options)
-        canvas.create_window(80, 125, window=option_menu)
+    def update_info_label(self, text, duration=2):
+        self.canvas.itemconfig(self.ui_widgets['info_label'], text=text)
+        self.root.update()
+        if duration:
+            sleep(duration)
 
-        submit_button = tk.Button(root, text="Submit", command=upgrade1, height=1, width=5, font=('Arial', '10'))
-        canvas.create_window(80, 155, window=submit_button)
+    def update_player_health_label(self):
+        self.canvas.itemconfig(self.ui_widgets['player_health_label'], text=f"Your Health: {self.player.health}")
 
-        while not upgrade_button_pressed1:
-            root.update_idletasks()
-            root.update()
+    def get_current_tier_data(self, data_map):
+        for tier_num in sorted(data_map.keys()):
+            tier = data_map[tier_num]
+            if self.player.level <= tier["level_cap"]:
+                return tier
+        return data_map[max(data_map.keys())]
+
+    def select_enemy(self):
+        current_tier = self.get_current_tier_data(ALL_ENEMIES)
+        return random.choice(list(current_tier["enemies"].keys()))
+
+    def fight_enemy(self, enemy_name):
+        current_tier_enemies = self.get_current_tier_data(ALL_ENEMIES)["enemies"]
+        enemy_stats = current_tier_enemies[enemy_name]
+        enemy_health = enemy_stats["health"]
+        enemy_attack = enemy_stats["attack"]
+
+        print(f"A wild {enemy_name} appears!\n")
+        self.update_info_label(f"A wild {enemy_name} appears!", 1)
+
+        enemy_photo = load_and_resize_image(os.path.join(IMAGE_PATH, "slime.png"), 24)
+        enemy_image = self.canvas.create_image(425, 300, anchor="e", image=enemy_photo)
+        enemy_health_label = self.canvas.create_text(450, 230, text=f"Enemy Health: {enemy_health}", fill="black", font=("Arial", 12), anchor="e")
+
+        while enemy_health > 0 and self.player.health > 0:
+            # Player attacks
+            damage = self.player.attack
+            is_crit = random.random() <= self.player.critical_chance / 100
+            if is_crit:
+                damage *= 2
+            
+            enemy_health -= damage
+            print(f"You attack the {enemy_name} for {damage} damage.")
+            self.update_info_label(f"You attack the {enemy_name} for {damage} damage.", 0)
+            self.canvas.itemconfig(enemy_health_label, text=f"Enemy Health: {max(0, enemy_health)}")
+
+            # Simple attack animation
+            self.canvas.move(self.ui_widgets['player_image'], 225, 0)
+            self.canvas.move(self.ui_widgets['sword_image'], 225, 0)
+            self.root.update()
+            sleep(0.5)
+            self.canvas.move(self.ui_widgets['player_image'], -225, 0)
+            self.canvas.move(self.ui_widgets['sword_image'], -225, 0)
+            self.root.update()
+            sleep(1)
+
+            if enemy_health <= 0:
+                print(f"The {enemy_name} is defeated!\n")
+                self.update_info_label(f"The {enemy_name} is defeated!", 2)
+                self.enemies_defeated += 1
+                self.player.level += 1
+                print(f"You leveled up to level {self.player.level}")
+                self.update_info_label(f"You leveled up to level {self.player.level}", 2)
+                break
+
+            # Enemy attacks
+            self.player.health -= enemy_attack
+            print(f"The {enemy_name} attacks you for {enemy_attack} damage.")
+            self.update_info_label(f"The {enemy_name} attacks you for {enemy_attack} damage.", 0)
+            self.update_player_health_label()
+
+            # Simple enemy attack animation
+            self.canvas.move(enemy_image, -275, 0)
+            self.root.update()
+            sleep(0.5)
+            self.canvas.move(enemy_image, 275, 0)
+            self.root.update()
+            sleep(1)
+
+            if self.player.health <= 0:
+                self.handle_game_over()
+                return
+
+        self.canvas.delete(enemy_image)
+        self.canvas.delete(enemy_health_label)
+        if self.player.health > 0:
+            print("You survived the encounter.")
+            self.update_info_label("You survived the encounter.", 2)
         
-        upgrade_button_pressed1 = False
-    elif player["level"] <= 10:
-        def upgrade2():
-            global heal_amount, upgrade_button_pressed2, root, option_menu, submit_button
+        clear_console()
 
-            option_menu.destroy()
-            submit_button.destroy()
-
-            upgrade_option2 = option_var.get()
-            if upgrade_option2 == "1":
-                sleep(1)
-                clear()
-                print("Adding 7.5 attack damage to you...")
-                player["attack"] += 7.5
-                sleep(3)
-                clear()
-            elif upgrade_option2 == "2":
-                sleep(1)
-                clear()
-                print("Increasing heal amount by 20...")
-                heal_amount += 20
-                sleep(3)
-                clear()
-            elif upgrade_option2 == "3":
-                sleep(1)
-                clear()
-                player["critical_chance"] += 1
-                print("Increasing critical chance by 1%...")
-                canvas.itemconfig(info_label, text=f"Increasing critical chance by 1%...")
-                sleep(3)
-                clear()
-            else:
-                sleep(1)
-                clear()
-                print("No upgrade was added")
-                canvas.itemconfig(info_label, text=f"No upgrade was added")
-                sleep(2)
-                clear()
-            
-            upgrade_button_pressed2 = True
-
-        print("Tier 2 upgrades\n")
-        print("1. Increase attack damage by 7.5\n2. Increase healing amount by 20\n3. Increase critical chance by 1%")
-        canvas.itemconfig(info_label, text=f"Tier 2 upgrades\n\n1. Increase attack damage by 7.5\n2. Increase healing amount by 20\n3. Increase critical chance by 1%")
+    def handle_upgrade(self):
+        clear_console()
         sleep(1)
-        options = ["Choose an option", "1", "2", "3"]
-
-        option_var = StringVar()
-        option_var.set(options[0])
-
-        option_menu = OptionMenu(root, option_var, *options)
-        canvas.create_window(80, 125, window=option_menu)
-
-        submit_button = tk.Button(root, text="Submit", command=upgrade2, height=1, width=5, font=('Arial', '10'))
-        canvas.create_window(80, 155, window=submit_button)
-
-        while not upgrade_button_pressed2:
-            root.update_idletasks()
-            root.update()
         
-        upgrade_button_pressed2 = False
-    elif player["level"] <= 15:
-        def upgrade3():
-            global heal_amount, upgrade_button_pressed3, root, option_menu, submit_button
+        current_tier = self.get_current_tier_data(UPGRADE_TIERS)
+        upgrades = current_tier["upgrades"]
+        
+        upgrade_texts = [f"{key}. {val['text']}" for key, val in upgrades.items()]
+        print(f"Tier {self.player.level} upgrades\n")
+        print("\n".join(upgrade_texts))
+        self.update_info_label(f"Tier {self.player.level} upgrades\n\n" + "\n".join(upgrade_texts), 0)
 
-            option_menu.destroy()
-            submit_button.destroy()
-
-            upgrade_option3 = option_var.get()
-            if upgrade_option3 == "1":
-                sleep(1)
-                clear()
-                print("Adding 10 attack damage to you...")
-                player["attack"] += 10
-                sleep(3)
-                clear()
-            elif upgrade_option3 == "2":
-                sleep(1)
-                clear()
-                print("Increasing heal amount by 25...")
-                heal_amount += 25
-                sleep(3)
-                clear()
-            elif upgrade_option3 == "3":
-                sleep(1)
-                clear()
-                player["critical_chance"] += 2
-                print("Increasing critical chance by 2%...")
-                sleep(3)
-                clear()
-            else:
-                sleep(1)
-                clear()
-                print("No upgrade was added")
-                canvas.itemconfig(info_label, text=f"No upgrade was added")
-                sleep(2)
-                clear()
-            
-            upgrade_button_pressed3 = True
-
-        print("Tier 3 upgrades")
-        print("1. Increase attack damage by 10\n2. Increase healing amount by 25\n3. Increase critical chance by 2%")
-        canvas.itemconfig(info_label, text=f"Tier 3 upgrades\n\n1. Increase attack damage by 10\n2. Increase healing amount by 25\n3. Increase critical chance by 2%")
-        sleep(1)
-        options = ["Choose an option", "1", "2", "3"]
-
-        option_var = StringVar()
+        options = ["Choose an option"] + list(upgrades.keys())
+        option_var = StringVar(self.root)
         option_var.set(options[0])
 
-        option_menu = OptionMenu(root, option_var, *options)
-        canvas.create_window(80, 125, window=option_menu)
-
-        submit_button = tk.Button(root, text="Submit", command=upgrade3, height=1, width=5, font=('Arial', '10'))
-        canvas.create_window(80, 155, window=submit_button)
-
-        while not upgrade_button_pressed3:
-            root.update_idletasks()
-            root.update()
-
-        upgrade_button_pressed3 = False
-    elif player["level"] <= 20:
-        def upgrade4():
-            global heal_amount, upgrade_button_pressed4, root, option_menu, submit_button
-
-            option_menu.destroy()
-            submit_button.destroy()
-
-            upgrade_option4 = option_var.get()
-            if upgrade_option4 == "1":
-                sleep(1)
-                clear()
-                print("Adding 12.5 attack damage to you...")
-                player["attack"] += 12.5
-                sleep(3)
-                clear()
-            elif upgrade_option4 == "2":
-                sleep(1)
-                clear()
-                print("Increasing heal amount by 30...")
-                heal_amount += 30
-                sleep(3)
-                clear()
-            elif upgrade_option4 == "3":
-                sleep(1)
-                clear()
-                player["critical_chance"] += 2
-                print("Increasing critical chance by 2%...")
-                sleep(3)
-                clear()
+        def on_submit(choice):
+            self.cleanup_ui_widgets(['upgrade_menu', 'upgrade_button'])
+            if choice in upgrades:
+                upgrade_info = upgrades[choice]
+                print(f"Applying upgrade: {upgrade_info['text']}")
+                if "attack" in upgrade_info["text"] or "critical" in upgrade_info["text"]:
+                    upgrade_info["action"](self.player)
+                else:
+                    upgrade_info["action"](self)
+                self.update_info_label(f"Upgraded: {upgrade_info['text']}", 3)
             else:
-                sleep(1)
-                clear()
                 print("No upgrade was added")
-                canvas.itemconfig(info_label, text=f"No upgrade was added")
-                sleep(2)
-                clear()
-            
-            upgrade_button_pressed4 = True
+                self.update_info_label("No upgrade was added", 2)
+            clear_console()
+            self.game_loop()
 
-        print("Tier 4 upgrades")
-        print("1. Increase attack damage by 12.5\n2. Increase healing amount by 30\n3. Increase critical chance by 2%")
-        canvas.itemconfig(info_label, text=f"Tier 4 upgrades\n\n1. Increase attack damage by 12.5\n2. Increase healing amount by 30\n3. Increase critical chance by 2%")
+        option_menu = OptionMenu(self.root, option_var, *options)
+        submit_button = Button(self.root, text="Submit", command=lambda: on_submit(option_var.get()), height=1, width=5, font=('Arial', '10'))
+
+        self.ui_widgets['upgrade_menu'] = self.canvas.create_window(80, 125, window=option_menu)
+        self.ui_widgets['upgrade_button'] = self.canvas.create_window(80, 155, window=submit_button)
+
+    def handle_heal(self):
+        clear_console()
         sleep(1)
-        options = ["Choose an option", "1", "2", "3"]
+        print("Healing...\n")
+        self.update_info_label("Healing...", 2)
+        self.player.health += self.heal_amount
+        print(f"Your health is now at {self.player.health}")
+        self.update_info_label(f"Your health is now at {self.player.health}", 2)
+        self.update_player_health_label()
+        clear_console()
+        self.game_loop()
 
-        option_var = StringVar()
+    def handle_exit(self):
+        clear_console()
+        print("Thanks for playing!")
+        self.update_info_label("Thanks for playing!", 3)
+        self.root.quit()
+
+    def handle_game_over(self):
+        sleep(2)
+        clear_console()
+        print("You have been defeated. Game Over.")
+        sleep(1)
+        print(f"\nYou killed a total of {self.enemies_defeated} enemies")
+        print(f"You died with {self.player.level} levels")
+        self.update_info_label(f"You have been defeated. Game Over.\n\nYou killed {self.enemies_defeated} enemies\nYou died at level {self.player.level}", 5)
+        self.root.quit()
+
+    def game_loop(self):
+        enemy = self.select_enemy()
+        self.fight_enemy(enemy)
+
+        if self.player.health <= 0:
+            return
+
+        print(f"You healed by {self.heal_amount} health\n")
+        self.player.health += self.heal_amount
+        self.update_info_label(f"You healed by {self.heal_amount} health", 2)
+        self.update_player_health_label()
+        
+        stats_text = (
+            f"You are level {self.player.level}, have {self.player.health} health left, "
+            f"{self.player.attack} attack damage, heal {self.heal_amount} health per battle, "
+            f"and have a {self.player.critical_chance}% chance to crit\n"
+        )
+        print(stats_text)
+        self.update_info_label(stats_text.replace(", ", "\n"), 7.5)
+
+        self.prompt_next_action()
+
+    def prompt_next_action(self):
+        self.cleanup_ui_widgets(['option_menu', 'submit_button'])
+        print("Here are your options:\n")
+        options_text = f"1. Continue fighting\n2. Upgrade\n3. Heal again (Heal by {self.heal_amount})\n4. Leave"
+        print(options_text)
+        self.update_info_label("Here are your options:\n\n" + options_text.replace("\n", "\n"), 0)
+
+        options = ["Choose an option", "1", "2", "3", "4"]
+        option_var = StringVar(self.root)
         option_var.set(options[0])
 
-        option_menu = OptionMenu(root, option_var, *options)
-        canvas.create_window(80, 125, window=option_menu)
+        def on_submit(choice):
+            self.cleanup_ui_widgets(['option_menu', 'submit_button'])
+            if choice == "1":
+                self.game_loop()
+            elif choice == "2":
+                self.handle_upgrade()
+            elif choice == "3":
+                self.handle_heal()
+            elif choice == "4":
+                self.handle_exit()
 
-        submit_button = tk.Button(root, text="Submit", command=upgrade4, height=1, width=5, font=('Arial', '10'))
-        canvas.create_window(80, 155, window=submit_button)
+        option_menu = OptionMenu(self.root, option_var, *options)
+        submit_button = Button(self.root, text="Submit", command=lambda: on_submit(option_var.get()), height=1, width=5, font=('Arial', '10'))
 
-        while not upgrade_button_pressed4:
-            root.update_idletasks()
-            root.update()
+        self.ui_widgets['option_menu'] = self.canvas.create_window(80, 125, window=option_menu)
+        self.ui_widgets['submit_button'] = self.canvas.create_window(80, 155, window=submit_button)
 
-        upgrade_button_pressed4 = False
-    elif player["level"] <= 25:
-        def upgrade5():
-            global heal_amount, upgrade_button_pressed5, root, option_menu, submit_button
+    def cleanup_ui_widgets(self, widget_keys):
+        for key in widget_keys:
+            if key in self.ui_widgets:
+                widget_id = self.ui_widgets.pop(key)
+                # Check if it's a canvas item or a widget
+                if isinstance(widget_id, int):
+                    self.canvas.delete(widget_id)
+                else:
+                    widget_id.destroy()
 
-            option_menu.destroy()
-            submit_button.destroy()
+    def start_game_thread(self):
+        self.cleanup_ui_widgets(['start_button'])
+        if not self.running:
+            self.running = True
+            # Run the game loop in a separate thread to keep the UI responsive
+            game_thread = Thread(target=self.game_loop, daemon=True)
+            game_thread.start()
 
-            upgrade_option5 = option_var.get()
-            if upgrade_option5 == "1":
-                sleep(1)
-                clear()
-                print("Adding 12.5 attack damage to you...")
-                player["attack"] += 12.5
-                sleep(3)
-                clear()
-            elif upgrade_option5 == "2":
-                sleep(1)
-                clear()
-                print("Increasing heal amount by 30...")
-                heal_amount += 30
-                sleep(3)
-                clear()
-            elif upgrade_option5 == "3":
-                sleep(1)
-                clear()
-                player["critical_chance"] += 2
-                print("Increasing critical chance by 2%...")
-                sleep(3)
-                clear()
-            else:
-                sleep(1)
-                clear()
-                print("No upgrade was added")
-                canvas.itemconfig(info_label, text=f"No upgrade was added")
-                sleep(2)
-                clear()
-            
-            upgrade_button_pressed5 = True
-
-        print("Tier 5 upgrades")
-        print("1. Increase attack damage by 15\n2. Increase healing amount by 35\n3. Increase critical chance by 3%")
-        canvas.itemconfig(info_label, text=f"Tier 5 upgrades\n\n1. Increase attack damage by 15\n2. Increase healing amount by 35\n3. Increase critical chance by 3%")
-        sleep(1)
-        options = ["Choose an option", "1", "2", "3"]
-
-        option_var = StringVar()
-        option_var.set(options[0])
-
-        option_menu = OptionMenu(root, option_var, *options)
-        canvas.create_window(80, 125, window=option_menu)
-
-        submit_button = tk.Button(root, text="Submit", command=upgrade5, height=1, width=5, font=('Arial', '10'))
-        canvas.create_window(80, 155, window=submit_button)
-
-        while not upgrade_button_pressed5:
-            root.update_idletasks()
-            root.update()
-
-        upgrade_button_pressed5 = False
-
-def handle_heal():
-    global heal_amount
-
-    clear()
-    sleep(1)
-    print("Healing...\n")
-    canvas.itemconfig(info_label, text=f"Healing...")
-    sleep(2)
-    player["health"] += heal_amount
-    print(f"Your health is now at {player['health']}")
-    canvas.itemconfig(info_label, text=f"Your health is now at {player['health']}")
-    canvas.itemconfig(playerHealth_label, text=f"Your Health: {player['health']}")
-    sleep(2)
-    clear()
-
-def handle_exit():
-    clear()
-    print("Thanks for playing!")
-    canvas.itemconfig(info_label, text=f"Thanks for playing!")
-    sleep(3)
-    exit()
-
-def game_loop():
-    global heal_amount, running, playerHealth_label, option_chosen, option_var, option_menu, submit_button, button_pressed
-
-    left = "w"
-    right = "e"
-    up = "n"
-    down = "s"
-    bottom_left = "sw"
-    bottom_right = "se"
-    top_left = "nw"
-    top_right = "ne"
-
-    try:
-        while True:
-            enemy = select_enemy()
-            fight_enemy(enemy)
-
-            print(f"You healed by {heal_amount} health\n")
-            player["health"] += heal_amount
-            canvas.itemconfig(info_label, text=f"You healed by {heal_amount} health") 
-            canvas.itemconfig(playerHealth_label, text=f"Your Health: {player['health']}")
-            sleep(2)
-            print(f"You are level {player['level']}, have {player['health']} health left, {player['attack']} attack damage, heal {heal_amount} health per battle, and have a {player['critical_chance']}% chance to crit\n")
-            canvas.itemconfig(info_label, text=f"You are level {player['level']}\nhave {player['health']} health left\n{player['attack']} attack damage\nheal {heal_amount} health per battle\nand have a {player['critical_chance']}% chance to crit") 
-            sleep(7.5)
-
-            print("Here are your options:\n")
-            print(f"1. Continue fighting\n2. Upgrade\n3. Heal again (Heal by {heal_amount})\n4. Leave")
-            canvas.itemconfig(info_label, text=f"Here are your option\n\n1. Continue fighting\n2. Upgrade\n3. Heal again (Heal by {heal_amount})\n4. Leave") 
-
-            options = ["Choose an option", "1", "2", "3", "4"]
-
-            option_var = StringVar()
-            option_var.set(options[0])
-
-            option_menu = OptionMenu(root, option_var, *options)
-            canvas.create_window(80, 125, window=option_menu)
-
-            option_chosen = False
-
-            submit_button = tk.Button(root, text="Submit", command=handle_option, height=1, width=5, font=('Arial', '10'))
-            canvas.create_window(80, 155, window=submit_button)
-
-            while not button_pressed:
-                root.update_idletasks()
-                root.update()
-
-            button_pressed = False
-    except Exception as e:
-        print(f"Exception caught: {e}")
-
-
-def start_game():
-    global running, start_button
-
-    start_button.destroy()
-
-    if not running:
-        running = True
-        task_thread = Thread(target=game_loop)
-        task_thread.start()
-
-def start_gui():
-    global root, start_button
-
-    start_button = tk.Button(root, text="Begin Game", command=start_game, height=2, width=10, font=('Arial', '20'))
-    canvas.create_window(250, 450, window=start_button)
-
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.geometry("500x500")
+    root.title("RPG Game")
+    game_instance = Game(root)
     root.mainloop()
-
-start_gui()
